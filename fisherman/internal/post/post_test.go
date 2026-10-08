@@ -318,6 +318,38 @@ func TestCopyFlatpaks_FlatpakVarPathOverride(t *testing.T) {
 	}
 }
 
+// TestCopyFlatpaks_VarDiskRoutesToMountedVar verifies that when flatpakVarPath
+// is "var" — the value main.go passes when a dedicated /var disk is mounted at
+// target/var (hasVarDisk) — CopyFlatpaks writes to target/var/lib/flatpak on
+// the mounted secondary disk, never to the composefs deployment state on the
+// primary disk (target/state/os/default/var).
+func TestCopyFlatpaks_VarDiskRoutesToMountedVar(t *testing.T) {
+	mock := setupMockExec(t)
+	target := t.TempDir()
+
+	// Simulate no local flatpak data (nothing to copy, just verify the mkdir target).
+	mock.responses["du -sb /var/lib/flatpak"] = struct {
+		out []byte
+		err error
+	}{out: []byte("0\t/var/lib/flatpak\n")}
+
+	// This is the path main.go passes when hasVarDisk is set.
+	if err := post.CopyFlatpaks(target, nil, "var"); err != nil {
+		t.Fatalf("CopyFlatpaks: %v", err)
+	}
+
+	want := filepath.Join(target, "var", "lib", "flatpak")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("expected flatpak dir at %s to exist (on the mounted /var disk), got: %v", want, err)
+	}
+
+	// Ensure the composefs deployment-state path on the primary disk was NOT used.
+	stateVar := filepath.Join(target, "state", "os", "default", "var", "lib", "flatpak")
+	if _, err := os.Stat(stateVar); err == nil {
+		t.Errorf("flatpaks landed in composefs deployment state %s — secondary /var disk was bypassed", stateVar)
+	}
+}
+
 func TestEnsurePlymouthArgs(t *testing.T) {
 	tests := []struct {
 		name    string

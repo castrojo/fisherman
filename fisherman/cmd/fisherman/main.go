@@ -794,7 +794,15 @@ func main() {
 	pi++
 	step++
 
-	if err := post.CopyFlatpaks(activeTargetMount, r.Flatpaks, r.FlatpakVarPath); err != nil {
+	// When a dedicated /var disk is mounted at target/var (Step 5.5), write
+	// flatpaks onto that disk (target/var/lib/flatpak) instead of the composefs
+	// deployment state on the primary disk (target/state/os/default/var). Passing
+	// "var" as the relative path routes CopyFlatpaks at the mounted secondary disk.
+	flatpakVarPath := r.FlatpakVarPath
+	if hasVarDisk {
+		flatpakVarPath = "var"
+	}
+	if err := post.CopyFlatpaks(activeTargetMount, r.Flatpaks, flatpakVarPath); err != nil {
 		// Non-fatal — the system will work without pre-installed flatpaks.
 		progress.Info(fmt.Sprintf("Warning: could not copy flatpaks: %v", err))
 	}
